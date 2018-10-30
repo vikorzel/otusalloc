@@ -1,3 +1,7 @@
+// sandbox.cpp : This file contains the 'main' function. Program execution begins and ends there.
+//
+
+#include "pch.h"
 #include <iostream>
 #include <map>
 #include <memory>
@@ -10,7 +14,7 @@ struct map_smart_allocator {
     using reference = T&;
     using const_reference = const T&;
     int cntr = 0;
-    T* p;
+    T* p = nullptr;
     template<typename U>
     struct rebind {
         using other = map_smart_allocator<U,size>;
@@ -37,7 +41,7 @@ struct map_smart_allocator {
     template<typename U, typename ... Args>
     void construct(U* p, Args &&... args){
         std::cout<<__FUNCTION__<<std::endl;
-        ::new((void*)p) U(std::forward<Args>(args)...);
+        ::new((void *)p) U(std::forward<Args>(args)...);
     }
 
     void destroy(T* p){
@@ -68,11 +72,20 @@ struct own_elements_container{
 
     public:
         own_iterator():is_end(true){}
-        explicit own_iterator(T value):val(value), is_end(false), next(nullptr) {  }
-        own_iterator& operator++(){ if(next!=nullptr) return *next;
-            is_end=true;
-            return *this;
-                              }
+        explicit own_iterator(T value):
+			val(value), 
+			is_end(false), 
+			next(nullptr){  }
+        own_iterator& operator++(){ 
+			if(next != nullptr){
+				this->val = this->next->val;
+				this->next = this->next->next;				
+			}else{
+				is_end = true;				
+			}
+			return *this;			
+        }
+
         bool operator==(own_iterator another) const{
             if(is_end){
                 return is_end == another.is_end;
@@ -90,37 +103,34 @@ struct own_elements_container{
 
     using iterator = own_iterator;
     using own_allocator_type = allocator;
-    using element_allocator_type = typename allocator::template rebind<iterator>::other;
+    using element_allocator_type = typename allocator::template rebind<own_iterator>::other;
     element_allocator_type element_allocator;
-    std::shared_ptr<iterator> head_element;
-    std::shared_ptr<iterator> last_element;
-    iterator* tail_element;
+    iterator* first = nullptr;
+	iterator* end_element = nullptr;
+	iterator* last = nullptr;
+    
 
     own_elements_container(){
-        last_element.reset(element_allocator.allocate(1));
-        element_allocator.construct(last_element.get());
+        end_element = element_allocator.allocate(1);
+        element_allocator.construct(end_element);
     }
 
-    void add(T val){
-        if(!head_element){
-         head_element.reset(element_allocator.allocate(1));
-         element_allocator.construct(head_element.get(),val);
-         return;
-        }
-        if(nullptr==tail_element){
-            tail_element = element_allocator.allocate(1);
-            element_allocator.construct(tail_element,val);
-            head_element.get()->next=tail_element;
-            return;
-        }
-
-
+    void add(T val){		
+		iterator* new_element = element_allocator.allocate(1);				
+		element_allocator.construct(new_element,val);
+		if(first == nullptr) first = new_element;
+		if(last == nullptr){
+			last = new_element;
+		}else{
+			last->next=new_element;
+			last = last->next;
+		}
     }
 
-    iterator begin(){ return *(head_element.get()); }
-    iterator end(){ return *(last_element.get()); }
-    const iterator cbegin(){ return const_cast<T const&>(this->begin()); }
-    const iterator cend(){ return const_cast<T const&>(this->end()); }
+    iterator begin(){ return *first; }
+    iterator end(){ return *end_element; }
+    const iterator cbegin(){ return const_cast<own_iterator const&>(this->begin()); }
+    const iterator cend(){ return const_cast<own_iterator const&>(this->end()); }
 
 };
 
@@ -128,15 +138,13 @@ struct own_elements_container{
 int main()
 {
 
-    own_elements_container<int,map_smart_allocator<int,10>> own_container{};
-    std::cout<<typeid(own_container.element_allocator).name()<<std::endl;
-    for(int i = 0 ; i != 10 ; ++i){
+	own_elements_container<int,map_smart_allocator<int,10>> own_container{};    
+    for(int i = 1 ; i != 10 ; ++i){
         own_container.add(i*2);
     }
 
-    for( auto element : own_container ){
-        std::cout<<element<<std::endl;
-
+    for( auto element = own_container.begin() ; element != own_container.end(); ++element ){
+        std::cout<<*element<<std::endl;
     }
 
 
