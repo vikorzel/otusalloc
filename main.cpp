@@ -96,7 +96,7 @@ struct own_elements_container{
             }
             return val != another.val; }
         T operator*(){ return val; }
-        friend class own_elements_container<T,allocator>;
+        friend struct own_elements_container<T,allocator>;
 
     };
 
