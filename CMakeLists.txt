@@ -4,7 +4,7 @@ enable_testing()
 if($ENV{TRAVIS_BUILD_NUMBER})
     project(allocator VERSION 0.0.$ENV{TRAVIS_BUILD_NUMBER})
 else()
-    project(allocator VERSION 0.0.1001)
+    project(allocator VERSION 0.0.1002)
 endif()
 
 if(${CMAKE_MINOR_VERSION} GREATER 10)
