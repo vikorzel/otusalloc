@@ -1,10 +1,10 @@
 // sandbox.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
-#include "pch.h"
 #include <iostream>
 #include <map>
 #include <memory>
+#include <vector>
 
 template<typename T, size_t size>
 struct map_smart_allocator {
@@ -20,8 +20,7 @@ struct map_smart_allocator {
         using other = map_smart_allocator<U,size>;
     };
 
-    T *allocate(std::size_t n){
-        std::cout << __FUNCTION__ << "[n=" << n << "]" << " size=" << size << std::endl;
+    T *allocate(std::size_t){
         if(p==nullptr){
             p = (T*)std::malloc( sizeof(T) * size );
         }
@@ -31,21 +30,20 @@ struct map_smart_allocator {
         return reinterpret_cast<T*>(p+(cntr++));
     }
 
-    void deallocate(T*, std::size_t){
-        if(p != nullptr){
-            std::free(p);
-            p=nullptr;
-        }
+    void deallocate(T*, std::size_t){        
+        return;
+    }
+
+    ~map_smart_allocator(){
+        if(p!=nullptr) free(p);
     }
 
     template<typename U, typename ... Args>
-    void construct(U* p, Args &&... args){
-        std::cout<<__FUNCTION__<<std::endl;
+    void construct(U* p, Args &&... args){        
         ::new((void *)p) U(std::forward<Args>(args)...);
     }
 
-    void destroy(T* p){
-        std::cout<<__FUNCTION__<<std::endl;
+    void destroy(T* p){        
         p->~T();
     }
 };
@@ -73,31 +71,32 @@ struct own_elements_container{
     public:
         own_iterator():is_end(true){}
         explicit own_iterator(T value):
-			val(value), 
-			is_end(false), 
-			next(nullptr){  }
+            val(value),
+            is_end(false),
+            next(nullptr){  }
         own_iterator& operator++(){ 
-			if(next != nullptr){
-				this->val = this->next->val;
-				this->next = this->next->next;				
-			}else{
-				is_end = true;				
-			}
+            if(next != nullptr){
+                this->val = this->next->val;
+                this->next = this->next->next;
+            }else{
+                is_end = true;
+            }
 			return *this;			
         }
 
         bool operator==(own_iterator another) const{
-            if(is_end){
+            std::cout<<"compare"<<std::endl;
+            if(another.is_end){
                 return is_end == another.is_end;
             }
             return val == another.val; }
         bool operator!=(own_iterator another){
-            if(is_end){
+            if(another.is_end){
                 return is_end != another.is_end;
             }
             return val != another.val; }
         T operator*(){ return val; }
-        friend void own_elements_container<T,allocator>::add(T);
+        friend class own_elements_container<T,allocator>;
 
     };
 
@@ -106,8 +105,8 @@ struct own_elements_container{
     using element_allocator_type = typename allocator::template rebind<own_iterator>::other;
     element_allocator_type element_allocator;
     iterator* first = nullptr;
-	iterator* end_element = nullptr;
-	iterator* last = nullptr;
+    iterator* end_element = nullptr;
+    iterator* last = nullptr;
     
 
     own_elements_container(){
@@ -127,7 +126,24 @@ struct own_elements_container{
 		}
     }
 
-    iterator begin(){ return *first; }
+    ~own_elements_container(){
+        if(first==nullptr) return;
+        std::vector<own_iterator*> iterators;
+        own_iterator* it =first;
+        while(it != nullptr){
+            iterators.push_back( it );
+            it = it->next;
+        }
+        for( auto it = iterators.rbegin() ; it != iterators.rend() ; ++it ){
+            element_allocator.destroy( *it );
+            element_allocator.deallocate(*it,1);
+        }
+        element_allocator.destroy(end_element);
+        element_allocator.deallocate(end_element,1);
+    }
+
+    iterator begin(){
+        return *first; }
     iterator end(){ return *end_element; }
     const iterator cbegin(){ return const_cast<own_iterator const&>(this->begin()); }
     const iterator cend(){ return const_cast<own_iterator const&>(this->end()); }
@@ -137,31 +153,33 @@ struct own_elements_container{
 
 int main()
 {
-
-	own_elements_container<int,map_smart_allocator<int,10>> own_container{};    
-    for(int i = 1 ; i != 10 ; ++i){
-        own_container.add(i*2);
-    }
-
-    for( auto element = own_container.begin() ; element != own_container.end(); ++element ){
-        std::cout<<*element<<std::endl;
-    }
-
-
-
-    /*
-    auto m_regular = std::map<int, int>();
-    auto m_ownalloc = std::map<int,int, std::less<int>, map_smart_allocator<std::pair<const int, int>,10>>{};
-    for(int i = 0 ; i != 10 ; i++){
-        int fact_r = fact(i);
-        m_ownalloc[i] = fact_r;
-        m_regular[i] = fact_r;
-    }
+    std::map<int,int> std_container_std_allocator{};
     for(int i = 0 ; i != 10 ; ++i){
-        std::cout << i << " - " << m_ownalloc[i] << std::endl;
-        std::cout << i << " - " << m_regular[i] << std::endl;
-    }*/
+        std_container_std_allocator[i] = fact(i);
+    }
 
+    std::map<int,int,std::less<int>, map_smart_allocator<std::pair<const int, int>,10>> std_container_own_allocator{};
+    for(int i = 0 ; i != 10 ; ++i){
+        std_container_own_allocator[i]= fact(i);
+    }
 
+    for(auto& element: std_container_own_allocator){
+        std::cout<<element.first << " " << element.second << std::endl;
+    }
+
+    own_elements_container<int> own_container_std_allocator{};
+    for(int i = 0 ; i != 10 ; ++i ){
+        own_container_std_allocator.add(i);
+    }
+
+    own_elements_container<int,map_smart_allocator<int,10>> own_container_own_allocator{};
+    for( int i = 0 ; i != 10 ; ++i ){
+        own_container_own_allocator.add(i);
+    }
+
+    for( auto element:  own_container_own_allocator)
+    {
+        std::cout<<element<<std::endl;
+    }
 }
 
