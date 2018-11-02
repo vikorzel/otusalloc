@@ -27,6 +27,7 @@ struct map_smart_allocator {
         if(!p){
             throw std::bad_alloc();
         }
+        std::cout<<"cntr="<<cntr<<std::endl;
         return reinterpret_cast<T*>(p+(cntr++));
     }
 
@@ -89,12 +90,12 @@ struct own_elements_container{
             if(another.is_end){
                 return is_end == another.is_end;
             }
-            return val == another.val; }
+            return next == another.next; }
         bool operator!=(own_iterator another){
             if(another.is_end){
                 return is_end != another.is_end;
             }
-            return val != another.val; }
+            return next == another.next; }
         T operator*(){ return val; }
         friend struct own_elements_container<T,allocator>;
 
@@ -105,13 +106,11 @@ struct own_elements_container{
     using element_allocator_type = typename allocator::template rebind<own_iterator>::other;
     element_allocator_type element_allocator;
     iterator* first = nullptr;
-    iterator* end_element = nullptr;
     iterator* last = nullptr;
     
 
     own_elements_container(){
-        end_element = element_allocator.allocate(1);
-        element_allocator.construct(end_element);
+
     }
 
     void add(T val){		
@@ -138,13 +137,15 @@ struct own_elements_container{
             element_allocator.destroy( *it );
             element_allocator.deallocate(*it,1);
         }
-        element_allocator.destroy(end_element);
-        element_allocator.deallocate(end_element,1);
+        
     }
 
     iterator begin(){
         return *first; }
-    iterator end(){ return *end_element; }
+    iterator end(){ auto end = *last;
+                    end.is_end = true;
+                    return end;
+     }
     const iterator cbegin(){ return const_cast<own_iterator const&>(this->begin()); }
     const iterator cend(){ return const_cast<own_iterator const&>(this->end()); }
 
@@ -173,13 +174,10 @@ int main()
     }
 
     own_elements_container<int,map_smart_allocator<int,10>> own_container_own_allocator{};
-    for( int i = 0 ; i != 10 ; ++i ){
-        own_container_own_allocator.add(i);
-    }
 
-    for( auto element:  own_container_own_allocator)
-    {
+    for( int i = 0 ; i != 10 ; ++i ){ own_container_own_allocator.add(i); }
+    for( auto element: own_container_own_allocator) {
         std::cout<<element<<std::endl;
-    }
+    }    
 }
 
