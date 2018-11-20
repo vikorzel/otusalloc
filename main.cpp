@@ -27,7 +27,6 @@ struct map_smart_allocator {
         if(!p){
             throw std::bad_alloc();
         }
-        std::cout<<"cntr="<<cntr<<std::endl;
         return reinterpret_cast<T*>(p+(cntr++));
     }
 
@@ -52,7 +51,7 @@ struct map_smart_allocator {
 int fact(int n){
     if (n < 2) return 1;
     int res = 1;
-    for(int i = 1 ; i != n ; i++){
+    for(int i = 1 ; i <= n ; i++){
         res *= i;
     }
     return res;
@@ -66,7 +65,6 @@ struct own_elements_container{
     protected:
         T val;
         bool is_end;
-        unsigned char res[3];
         own_iterator* next;
 
     public:
@@ -86,7 +84,6 @@ struct own_elements_container{
         }
 
         bool operator==(own_iterator another) const{
-            std::cout<<"compare"<<std::endl;
             if(another.is_end){
                 return is_end == another.is_end;
             }
@@ -113,9 +110,22 @@ struct own_elements_container{
 
     }
 
-    void add(T val){		
+    own_elements_container( const own_elements_container& another){
+        first = another.first;
+        last = another.last;  
+        element_allocator = another.element_allocator;      
+    }
+
+    own_elements_container( own_elements_container&& another ){
+        std::swap(first,another.first);
+        std::swap(last,another.last);
+        std::swap(element_allocator, another.element_allocator);
+    }
+
+    template <typename ... Args>
+    void add(Args&& ... args){		
 		iterator* new_element = element_allocator.allocate(1);				
-		element_allocator.construct(new_element,val);
+		element_allocator.construct(new_element,std::forward<Args>(args)...);
 		if(first == nullptr) first = new_element;
 		if(last == nullptr){
 			last = new_element;
@@ -127,17 +137,14 @@ struct own_elements_container{
 
     ~own_elements_container(){
         if(first==nullptr) return;
-        std::vector<own_iterator*> iterators;
         own_iterator* it =first;
+        own_iterator* for_delete;
         while(it != nullptr){
-            iterators.push_back( it );
+            for_delete = it;
+            element_allocator.destroy(for_delete);
+            element_allocator.deallocate(for_delete,1);
             it = it->next;
         }
-        for( auto it = iterators.rbegin() ; it != iterators.rend() ; ++it ){
-            element_allocator.destroy( *it );
-            element_allocator.deallocate(*it,1);
-        }
-        
     }
 
     iterator begin(){
